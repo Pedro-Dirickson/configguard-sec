@@ -231,6 +231,15 @@ class FalsePositiveTests(unittest.TestCase):
         self.assertEqual(self.scanner.scan_text('banner = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'), [])
         self.assertEqual(self.scanner.scan_text("checksum = 00000000000000000000000000000000"), [])
 
+    def test_literal_charsets_are_ignored(self):
+        lines = [
+            'BASE64 = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")',
+            "alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEF'",
+        ]
+        for line in lines:
+            with self.subTest(line=line):
+                self.assertEqual(self.scanner.scan_text(line), [])
+
     def test_ignore_pragma(self):
         line = f"key = {AWS_KEY_ID}  # configguard:ignore"
         self.assertEqual(self.scanner.scan_text(line), [])

@@ -381,6 +381,8 @@ class SecretScanner:
             )
 
     def _classify_high_entropy(self, token: str) -> str | None:
+        if _has_sequential_run(token):
+            return None
         entropy = shannon_entropy(token)
         if set(token) <= HEX_CHARSET:
             if len(token) >= 32 and entropy >= self.hex_threshold and _has_hex_mix(token):
@@ -400,6 +402,23 @@ def _has_mixed_classes(token: str) -> bool:
         any(c.isupper() for c in token)
         and any(c.islower() for c in token)
         and any(c.isdigit() for c in token)
+    )
+
+
+_SEQUENCE_ALPHABETS = ("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz", "0123456789")
+_SEQUENTIAL_RUN = 6
+_SEQUENTIAL_NGRAMS = frozenset(
+    alphabet[i:i + _SEQUENTIAL_RUN]
+    for alphabet in _SEQUENCE_ALPHABETS
+    for i in range(len(alphabet) - _SEQUENTIAL_RUN + 1)
+)
+
+
+def _has_sequential_run(token: str) -> bool:
+    """Charsets e alfabetos literais têm alta entropia, mas não são segredos."""
+    return any(
+        token[i:i + _SEQUENTIAL_RUN] in _SEQUENTIAL_NGRAMS
+        for i in range(len(token) - _SEQUENTIAL_RUN + 1)
     )
 
 

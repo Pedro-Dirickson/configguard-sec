@@ -317,7 +317,7 @@ def audit_debug_flags(text: str, file_path: str = "<config>") -> list[ConfigFind
                     severity=Severity.HIGH if rule_id == "debug-enabled" else Severity.MEDIUM,
                     file_path=file_path,
                     line_number=line_number,
-                    evidence=match.group(0).strip(),
+                    evidence=match.group(0).strip().strip("\"'"),
                     recommendation=recommendation,
                 ))
                 break
