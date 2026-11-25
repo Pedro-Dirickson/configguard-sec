@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -173,6 +174,8 @@ def audit_dockerfile(text: str, file_path: str = "Dockerfile") -> list[ConfigFin
             stages[-1].user_line = line_number
         elif keyword == "EXPOSE":
             findings.extend(_exposed_ports(args, line_number, file_path))
+        elif keyword == "ENV":
+            findings.extend(_env_runtime_flags(args, line_number, file_path))
         elif keyword == "RUN":
             findings.extend(_permissive_chmod(instruction, line_number, file_path))
 
@@ -289,39 +292,85 @@ def audit_compose_ports(text: str, file_path: str = "docker-compose.yml") -> lis
     return findings
 
 
+_RUNTIME_FLAG_RULES = (
+    (
+        _DEBUG_FLAG,
+        "debug-enabled",
+        Severity.HIGH,
+        "Modo debug habilitado em configuração",
+        "Desative o debug em produção e controle-o por variável de ambiente com padrão False.",
+    ),
+    (
+        _DEV_ENVIRONMENT,
+        "development-environment",
+        Severity.MEDIUM,
+        "Ambiente configurado como desenvolvimento",
+        "Defina o ambiente como 'production' nos artefatos de deploy.",
+    ),
+)
+
+
+def _runtime_flag_finding(
+    text: str,
+    line_number: int,
+    file_path: str,
+    *,
+    evidence_prefix: str = "",
+    location: str = "",
+    anchored: bool = False,
+) -> ConfigFinding | None:
+    for pattern, rule_id, severity, description, recommendation in _RUNTIME_FLAG_RULES:
+        match = pattern.match(text) if anchored else pattern.search(text)
+        if match:
+            return ConfigFinding(
+                rule_id=rule_id,
+                description=f"{description}{location}",
+                severity=severity,
+                file_path=file_path,
+                line_number=line_number,
+                evidence=evidence_prefix + match.group(0).strip().strip("\"'"),
+                recommendation=recommendation,
+            )
+    return None
+
+
 def audit_debug_flags(text: str, file_path: str = "<config>") -> list[ConfigFinding]:
     findings: list[ConfigFinding] = []
     for line_number, raw in enumerate(text.splitlines(), start=1):
         stripped = raw.strip()
         if not stripped or stripped.startswith(_COMMENT_PREFIXES):
             continue
-        for pattern, rule_id, description, recommendation in (
-            (
-                _DEBUG_FLAG,
-                "debug-enabled",
-                "Modo debug habilitado em configuração",
-                "Desative o debug em produção e controle-o por variável de ambiente com padrão False.",
-            ),
-            (
-                _DEV_ENVIRONMENT,
-                "development-environment",
-                "Ambiente configurado como desenvolvimento",
-                "Defina o ambiente como 'production' nos artefatos de deploy.",
-            ),
-        ):
-            match = pattern.search(raw)
-            if match:
-                findings.append(ConfigFinding(
-                    rule_id=rule_id,
-                    description=description,
-                    severity=Severity.HIGH if rule_id == "debug-enabled" else Severity.MEDIUM,
-                    file_path=file_path,
-                    line_number=line_number,
-                    evidence=match.group(0).strip().strip("\"'"),
-                    recommendation=recommendation,
-                ))
-                break
+        finding = _runtime_flag_finding(raw, line_number, file_path)
+        if finding is not None:
+            findings.append(finding)
     return findings
+
+
+def _env_assignments(args: str) -> list[str]:
+    """Normaliza 'ENV K=V K2="V 2"' e a forma legada 'ENV K V' em pares 'K=V'."""
+    try:
+        tokens = shlex.split(args, posix=True)
+    except ValueError:
+        tokens = args.split()
+    if not tokens:
+        return []
+    if "=" not in tokens[0]:
+        return [f"{tokens[0]}={' '.join(tokens[1:])}"]
+    return [token for token in tokens if "=" in token]
+
+
+def _env_runtime_flags(args: str, line_number: int, file_path: str) -> Iterator[ConfigFinding]:
+    for assignment in _env_assignments(args):
+        finding = _runtime_flag_finding(
+            assignment,
+            line_number,
+            file_path,
+            evidence_prefix="ENV ",
+            location=" (ENV da imagem)",
+            anchored=True,
+        )
+        if finding is not None:
+            yield finding
 
 
 def audit_permissions(path: str | os.PathLike[str], mode: int) -> list[ConfigFinding]:

@@ -100,6 +100,72 @@ class DockerfilePortTests(unittest.TestCase):
         self.assertEqual(findings, [])
 
 
+class DockerfileEnvTests(unittest.TestCase):
+    def audit_env(self, env_line):
+        findings = audit_dockerfile(f"FROM python:3.12-slim\n{env_line}\nUSER app\n")
+        return [f for f in findings if f.rule_id in {"debug-enabled", "development-environment"}]
+
+    def test_debug_enabled_via_env(self):
+        lines = [
+            "ENV DEBUG=True",
+            "ENV DEBUG=true",
+            'ENV DEBUG="1"',
+            "ENV DJANGO_DEBUG=yes",
+            "ENV DEBUG True",
+            "env FLASK_DEBUG=on",
+            "ENV PYTHONUNBUFFERED=1 DEBUG=True LANG=C.UTF-8",
+        ]
+        for line in lines:
+            with self.subTest(line=line):
+                findings = self.audit_env(line)
+                self.assertEqual(rule_ids(findings), ["debug-enabled"])
+                self.assertEqual(findings[0].severity, Severity.HIGH)
+                self.assertEqual(findings[0].line_number, 2)
+                self.assertTrue(findings[0].evidence.startswith("ENV "))
+                self.assertIn("ENV da imagem", findings[0].description)
+
+    def test_development_environment_via_env(self):
+        findings = self.audit_env("ENV FLASK_ENV=development")
+        self.assertEqual(rule_ids(findings), ["development-environment"])
+        self.assertEqual(findings[0].evidence, "ENV FLASK_ENV=development")
+
+    def test_multiple_flags_in_one_instruction(self):
+        findings = self.audit_env('ENV NODE_ENV=development DEBUG="true" PORT=8000')
+        self.assertEqual(sorted(rule_ids(findings)), ["debug-enabled", "development-environment"])
+
+    def test_line_continuation_reports_instruction_start(self):
+        findings = audit_dockerfile(dedent("""
+            FROM python:3.12-slim
+            ENV APP_HOME=/app \\
+                DEBUG=True \\
+                LOG_LEVEL=info
+            USER app
+        """))
+        self.assertEqual(rule_ids(findings), ["debug-enabled"])
+        self.assertEqual(findings[0].line_number, 2)
+
+    def test_safe_env_values(self):
+        lines = [
+            "ENV DEBUG=False",
+            "ENV DEBUG=0",
+            "ENV DEBUG=${DEBUG:-false}",
+            "ENV LOG_LEVEL=DEBUG",
+            "ENV FLASK_ENV=production NODE_ENV=production",
+            "ENV DEBUG_TOOLBAR_ENABLED=false",
+            'ENV GREETING="debug=true is not a key here"',
+            "ENV",
+        ]
+        for line in lines:
+            with self.subTest(line=line):
+                self.assertEqual(self.audit_env(line), [])
+
+    def test_commented_env_is_ignored(self):
+        self.assertEqual(self.audit_env("# ENV DEBUG=True"), [])
+
+    def test_arg_is_not_treated_as_env(self):
+        self.assertEqual(self.audit_env("ARG DEBUG=true"), [])
+
+
 class DockerfileChmodTests(unittest.TestCase):
     def test_chmod_777_in_run(self):
         findings = audit_dockerfile(dedent("""

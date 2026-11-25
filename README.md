@@ -5,12 +5,12 @@ CLI de DevSecOps em Python puro (somente biblioteca padrão) que audita reposit�
 ```
 $ configguard scan examples/vulnerable_sample
 [CRITICAL] .env.example:10  AWS Access Key ID
-[HIGH] Dockerfile:13  Container final executa explicitamente como root
+[HIGH] Dockerfile:16  Container final executa explicitamente como root
 [HIGH] deploy.sh:10  Token Bearer em cabeçalho de autorização
 ...
-Resumo:   critical: 4  high: 8  medium: 2  low: 0  |  total: 14
+Resumo:   critical: 4  high: 9  medium: 3  low: 0  |  total: 16
 Nota:     0/100 (F)
-Status:   REPROVADO (12 achado(s) >= high)
+Status:   REPROVADO (13 achado(s) >= high)
 ```
 
 ## Sumário
@@ -66,8 +66,8 @@ A análise de entropia calcula `H = -Σ p(c) · log2 p(c)` sobre cada token cand
 | `dockerfile-critical-port` | `EXPOSE` de SSH, Telnet, RDP, VNC, bancos de dados, Redis, Elasticsearch, Docker API etc. | high / critical |
 | `compose-critical-port` | Porta crítica publicada no host em `docker-compose.yml` (bindings em `127.0.0.1` são aceitos) | high / critical |
 | `permissive-chmod` | `chmod 777`, `666`, `o+w`, `a+rwx` em `RUN` de Dockerfile ou scripts shell (`chmod 1777` é aceito) | high |
-| `debug-enabled` | `DEBUG=True`, `FLASK_DEBUG=1`, `debug: true`, `app.run(debug=True)` | high |
-| `development-environment` | `FLASK_ENV=development`, `NODE_ENV=dev` | medium |
+| `debug-enabled` | `DEBUG=True`, `FLASK_DEBUG=1`, `debug: true`, `app.run(debug=True)`, `ENV DEBUG=True` em Dockerfiles | high |
+| `development-environment` | `FLASK_ENV=development`, `NODE_ENV=dev` (também via `ENV` em Dockerfiles) | medium |
 | `permissions-0777` / `permissions-world-writable` | Modo POSIX de scripts, executáveis e arquivos sensíveis (`.env`, `.pem`, `id_rsa`, `credentials.json`...) | high / critical |
 
 Builds multi-stage são avaliados corretamente: apenas o último estágio determina o usuário de execução, e imagens base `*:nonroot` são reconhecidas.
@@ -143,14 +143,14 @@ $env:PYTHONPATH="src"; python -m configguard scan .   # Windows PowerShell
 | Arquivo | Problemas plantados |
 |---|---|
 | `.env.example` | `DEBUG=True`, `FLASK_ENV=development`, URLs Postgres/Redis com senha, par de chaves AWS, `SECRET_KEY` hardcoded e dois placeholders que **não** devem ser reportados |
-| `Dockerfile` | `USER root`, `EXPOSE 22 5432`, `chmod -R 777` |
+| `Dockerfile` | `ENV APP_ENV=development DEBUG=True`, `USER root`, `EXPOSE 22 5432`, `chmod -R 777` |
 | `deploy.sh` | JWT e token Bearer embutidos, `chmod 777` |
 
 ```bash
 configguard scan examples/vulnerable_sample --no-history
 ```
 
-O resultado esperado é 14 achados (4 critical, 8 high, 2 medium) e exit code `1`.
+O resultado esperado é 16 achados (4 critical, 9 high, 3 medium) e exit code `1`.
 
 ### `scan`
 
@@ -261,7 +261,7 @@ jobs:
 ### Anatomia de um achado (terminal)
 
 ```
-[HIGH] Dockerfile:13  Container final executa explicitamente como root
+[HIGH] Dockerfile:16  Container final executa explicitamente como root
     dockerfile-root-user | USER root
     -> Troque para um usuário não-root (UID >= 1000) no estágio final.
 ```
@@ -349,7 +349,6 @@ O relatório Markdown contém uma tabela de metadados (alvo, branch, commit, not
 - O scanner analisa o **estado atual dos arquivos**, não o histórico do git. Um segredo removido em um commit posterior continua no histórico e deve ser tratado com rotação da credencial e reescrita do histórico (`git filter-repo`).
 - `--staged` lê a versão dos arquivos na árvore de trabalho, não o conteúdo exato do índice. Alterações feitas após o `git add` também são analisadas.
 - No hook `pre-commit`, o commit registrado no histórico é o `HEAD` anterior, pois o novo commit ainda não existe.
-- Flags de debug definidas via `ENV` dentro de Dockerfiles ainda não são auditadas.
 - Detecção por regex e entropia é heurística: segredos sem formato conhecido e com baixa entropia (ex.: senhas curtas fora de variáveis com nome sensível) podem passar.
 - Rodar o scanner na raiz deste repositório reporta achados nos testes e em `examples/`, que contêm segredos fictícios intencionalmente.
 

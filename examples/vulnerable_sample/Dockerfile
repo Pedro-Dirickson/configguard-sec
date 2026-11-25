@@ -1,6 +1,9 @@
 # ARQUIVO PROPOSITALMENTE INSEGURO - fixture de demonstracao do ConfigGuard.
 FROM python:3.12
 
+ENV APP_ENV=development \
+    DEBUG=True
+
 WORKDIR /app
 COPY . /app
 

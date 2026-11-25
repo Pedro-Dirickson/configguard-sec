@@ -140,7 +140,7 @@ class VulnerableSampleTests(unittest.TestCase):
         data = json.loads(out)
         self.assertEqual(code, EXIT_FINDINGS)
         self.assertEqual(data["files_scanned"], 3)
-        self.assertEqual(data["summary"], {"critical": 4, "high": 8, "medium": 2, "low": 0})
+        self.assertEqual(data["summary"], {"critical": 4, "high": 9, "medium": 3, "low": 0})
         by_file = {}
         for finding in data["findings"]:
             by_file.setdefault(finding["file_path"], set()).add(finding["rule_id"])
@@ -149,7 +149,10 @@ class VulnerableSampleTests(unittest.TestCase):
                 "database-connection-string", "aws-access-key-id", "aws-secret-access-key",
                 "debug-enabled", "development-environment", "generic-secret-assignment",
             },
-            "Dockerfile": {"permissive-chmod", "dockerfile-critical-port", "dockerfile-root-user"},
+            "Dockerfile": {
+                "debug-enabled", "development-environment",
+                "permissive-chmod", "dockerfile-critical-port", "dockerfile-root-user",
+            },
             "deploy.sh": {"jwt", "bearer-token", "permissive-chmod"},
         })
 
