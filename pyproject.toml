@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "configguard-sec"
+version = "0.1.0"
+description = "CLI de DevSecOps em Python puro que audita repositórios, Dockerfiles e configs em busca de segredos expostos e configurações inseguras."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Pedro Dirickson" }]
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+    "Environment :: Console",
+]
+
+[project.scripts]
+configguard = "configguard.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
