@@ -132,6 +132,28 @@ class ScanCommandTests(TempWorkspace):
         self.assertEqual(ctx.exception.code, 2)
 
 
+class VulnerableSampleTests(unittest.TestCase):
+    SAMPLE = Path(__file__).resolve().parents[1] / "examples" / "vulnerable_sample"
+
+    def test_sample_produces_documented_findings(self):
+        code, out, _ = run_cli("scan", str(self.SAMPLE), "-f", "json", "--no-history")
+        data = json.loads(out)
+        self.assertEqual(code, EXIT_FINDINGS)
+        self.assertEqual(data["files_scanned"], 3)
+        self.assertEqual(data["summary"], {"critical": 4, "high": 8, "medium": 2, "low": 0})
+        by_file = {}
+        for finding in data["findings"]:
+            by_file.setdefault(finding["file_path"], set()).add(finding["rule_id"])
+        self.assertEqual(by_file, {
+            ".env.example": {
+                "database-connection-string", "aws-access-key-id", "aws-secret-access-key",
+                "debug-enabled", "development-environment", "generic-secret-assignment",
+            },
+            "Dockerfile": {"permissive-chmod", "dockerfile-critical-port", "dockerfile-root-user"},
+            "deploy.sh": {"jwt", "bearer-token", "permissive-chmod"},
+        })
+
+
 class HistoryCommandTests(TempWorkspace):
     def test_history_terminal_and_json(self):
         self.write("app.py", "x = 1\n")
