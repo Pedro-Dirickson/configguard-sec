@@ -360,3 +360,7 @@ python -m unittest discover -s tests -v
 ```
 
 A suíte cobre casos positivos e falsos positivos de cada regra, persistência SQLite, renderização dos relatórios e integração de ponta a ponta com git real (incluindo um `git commit` bloqueado pelo hook). Os testes de integração isolam a configuração global do git e são pulados se o `git` não estiver disponível.
+
+## Licença
+
+Distribuído sob a licença MIT. Veja [LICENSE](LICENSE).
